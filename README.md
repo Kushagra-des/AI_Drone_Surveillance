@@ -236,6 +236,8 @@ This project is intended for educational purposes as part of a minor project in 
 - surveillance-system
 - real-time-detection
 
+---
+
 ## Contact
 
 For any suggestions or contributions, feel free to open an issue or submit a pull request.
