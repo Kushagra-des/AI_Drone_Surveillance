@@ -44,7 +44,7 @@ The system processes video captured from a drone (or prerecorded drone footage),
 
 ### Computer Vision
 
-- OpenCV
+- OpenCV & MediaPipe
 
 ### Deep Learning
 
@@ -217,6 +217,24 @@ This project is intended for educational purposes as part of a minor project in 
 - GitHub
 
 ---
+
+## Repository Topics
+- ai
+- artificial-intelligence
+- computer-vision
+- deep-learning
+- drone
+- drone-surveillance
+- object-detection
+- object-tracking
+- yolov8
+- opencv
+- mediapipe
+- python
+- pytorch
+- machine-learning
+- surveillance-system
+- real-time-detection
 
 ## Contact
 
