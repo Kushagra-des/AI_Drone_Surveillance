@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+*.pyc
+*.db
+*.sqlite3
+*.pt
+*.onnx
+sample_videos/*
+!sample_videos/.gitkeep
