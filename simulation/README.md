@@ -1,7 +1,5 @@
 # Simulation Module — AI Drone Surveillance System
 
-**Owner:** Member 3 | **Status:** Planned (not yet implemented)
-
 > [!IMPORTANT]
 > The simulation module is **optional future work**.  
 > The core detection pipeline in `ai_model/` must be working and tested
