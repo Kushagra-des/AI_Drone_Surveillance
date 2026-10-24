@@ -1,0 +1,37 @@
+# ── Model weights (too large for git) ───────────────────────────────────────
+*.pt
+*.onnx
+*.engine
+*.tflite
+*.pb
+
+# ── Sample / test videos (too large for git) ─────────────────────────────────
+sample_videos/
+*.mp4
+*.avi
+*.mov
+*.mkv
+
+# ── Python cache ─────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+
+# ── Ultralytics run artifacts ─────────────────────────────────────────────────
+runs/
+
+# ── Demo output frames / saved annotated videos ──────────────────────────────
+output/
+
+# ── OS / editor artifacts ─────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
