@@ -72,8 +72,8 @@ def section(title: str) -> None:
 def test_imports() -> None:
     section("1 · Import health")
     try:
-        from ai_model.detector import DroneObjectDetector, SUPPORTED_CLASSES
-        ok("ai_model.detector imported")
+        from ai_model.detector import DroneObjectDetector, YOLOv8Detector, process_frame, SUPPORTED_CLASSES
+        ok("ai_model.detector imported (DroneObjectDetector, YOLOv8Detector, process_frame)")
     except Exception as e:
         fail("ai_model.detector import", str(e))
 

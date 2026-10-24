@@ -8,7 +8,7 @@
 # ── Core inference ────────────────────────────────────────────────────────────
 ultralytics>=8.2.0,<9.0.0   # YOLOv8 — auto-downloads yolov8n.pt on first run
 opencv-python>=4.9.0,<5.0.0 # Frame processing and annotation
-numpy>=1.24.0,<2.0.0        # Array operations
+numpy>=1.24.0               # Array operations (supports numpy 1.x and 2.x)
 
 # ── PyTorch CPU wheel (safe default; GPU users replace this) ──────────────────
 torch>=2.1.0

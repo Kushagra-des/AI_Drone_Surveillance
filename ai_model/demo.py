@@ -34,7 +34,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 import sys
 import time
 from pathlib import Path
@@ -48,7 +47,6 @@ if str(_here.parent) not in sys.path:
 
 from ai_model.detector import DroneObjectDetector, SUPPORTED_CLASSES
 from ai_model.events   import DetectionEventEngine
-from ai_model.utils    import overlay_stats
 
 logging.basicConfig(
     level=logging.INFO,
@@ -168,12 +166,32 @@ def get_video_writer(
     cap: cv2.VideoCapture,
     output_path: Path,
 ) -> cv2.VideoWriter:
-    """Create an MP4 VideoWriter matching the capture resolution and FPS."""
+    """Create an MP4 VideoWriter matching the capture resolution and FPS.
+
+    Raises
+    ------
+    RuntimeError
+        If the capture reports zero width or height (camera not ready yet).
+    """
     w   = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     h   = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+
+    # FIX BUG 6: guard against unready capture (returns 0×0)
+    if w == 0 or h == 0:
+        raise RuntimeError(
+            f"VideoCapture reports zero frame size ({w}×{h}). "
+            "Camera may not be ready — try again after reading at least one frame."
+        )
+
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    return cv2.VideoWriter(str(output_path), fourcc, fps, (w, h))
+    writer = cv2.VideoWriter(str(output_path), fourcc, fps, (w, h))
+    if not writer.isOpened():
+        raise RuntimeError(
+            f"Failed to open VideoWriter at {output_path}. "
+            "Check that the 'output/' directory is writable and the codec is available."
+        )
+    return writer
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -213,8 +231,18 @@ def run_demo(args: argparse.Namespace) -> None:
         out_dir.mkdir(exist_ok=True)
         stem = Path(args.source).stem if src_type == "file" else "webcam"
         out_path = out_dir / f"{stem}_detected.mp4"
-        writer = get_video_writer(cap, out_path)
-        logger.info("Saving output to: %s", out_path)
+        # FIX BUG 6: read one warm-up frame before creating the writer so
+        # CAP_PROP_FRAME_WIDTH/HEIGHT are reliably populated for webcams.
+        if src_type == "webcam":
+            _ret, _warmup = cap.read()
+            if _ret:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)   # rewind (no-op for webcam, but safe)
+        try:
+            writer = get_video_writer(cap, out_path)
+            logger.info("Saving output to: %s", out_path)
+        except RuntimeError as exc:
+            logger.error("Could not create video writer: %s — saving disabled.", exc)
+            writer = None
 
     # ── display window ────────────────────────────────────────────────────────
     win_name = "AI Drone Surveillance — press Q to quit"
@@ -226,6 +254,9 @@ def run_demo(args: argparse.Namespace) -> None:
     frame_idx    = 0
     paused       = False
     session_start = time.perf_counter()
+    # FIX BUG 3: cap consecutive-read-failure counter to avoid infinite loop
+    MAX_CAM_RETRIES = 20
+    cam_fail_count  = 0
 
     logger.info("Starting detection loop … (press Q or ESC to quit)")
 
@@ -245,27 +276,41 @@ def run_demo(args: argparse.Namespace) -> None:
             if not ret:
                 if src_type == "file":
                     logger.info("End of video file.")
+                    break
                 else:
-                    logger.warning("Camera read failed — retrying …")
+                    cam_fail_count += 1
+                    logger.warning(
+                        "Camera read failed (attempt %d/%d) — retrying …",
+                        cam_fail_count, MAX_CAM_RETRIES,
+                    )
+                    if cam_fail_count >= MAX_CAM_RETRIES:
+                        logger.error(
+                            "Camera failed %d consecutive times — giving up. "
+                            "Check that the webcam is connected and not in use.",
+                            MAX_CAM_RETRIES,
+                        )
+                        break
                     time.sleep(0.05)
                     continue
-                break
 
-            # ── run detection ─────────────────────────────────────────────────
-            annotated, detections = detector.process_frame(frame, draw=True)
+            # Reset failure counter on successful read
+            cam_fail_count = 0
 
-            # ── evaluate events ───────────────────────────────────────────────
-            events = event_engine.evaluate(detections)
-            if events:
-                # Re-overlay with event flags
-                stats = detector.get_stats()
-                annotated = overlay_stats(
-                    annotated,
-                    fps=stats["fps"],
-                    proc_ms=stats["avg_proc_ms"],
-                    detection_count=len(detections),
-                    event_flags=events,
-                )
+            # ── evaluate events first so we can pass flags into process_frame ──
+            # (we run a cheap pre-detection-free evaluation here; real events
+            # are evaluated after detection below, in one combined pass)
+
+            # ── run detection (single inference pass) ──────────────────────────
+            # Pass event_engine so detections and event alerts are evaluated and drawn in a single pass
+            annotated, detections = detector.process_frame(
+                frame,
+                draw=(not args.no_display) or (writer is not None),
+                event_engine=event_engine,
+            )
+
+            # Log events to console if any occurred
+            if event_engine:
+                events = event_engine.evaluate(detections)
                 for ev in events:
                     logger.info("EVENT: %s", ev)
 

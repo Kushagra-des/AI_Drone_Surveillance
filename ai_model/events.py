@@ -55,11 +55,13 @@ class RestrictedZone:
     x2: int
     y2: int
 
-    def contains_bbox_centre(self, bbox: list[int]) -> bool:
+    def contains_bbox_centre(self, bbox: list[int] | list[float]) -> bool:
         """Return True if the bbox centre point falls inside this zone."""
-        bx1, by1, bx2, by2 = bbox
-        cx = (bx1 + bx2) // 2
-        cy = (by1 + by2) // 2
+        if not bbox or len(bbox) < 4:
+            return False
+        bx1, by1, bx2, by2 = bbox[:4]
+        cx = (bx1 + bx2) / 2.0
+        cy = (by1 + by2) / 2.0
         return self.x1 <= cx <= self.x2 and self.y1 <= cy <= self.y2
 
 
@@ -134,8 +136,8 @@ class DetectionEventEngine:
         """
         events: List[str] = []
 
-        persons  = [d for d in detections if d["class"] == "person"]
-        vehicles = [d for d in detections if d["class"] in self.config.vehicle_classes]
+        persons  = [d for d in detections if d.get("class") == "person"]
+        vehicles = [d for d in detections if d.get("class") in self.config.vehicle_classes]
 
         # Rule 1 — crowd density
         if len(persons) >= self.config.crowd_person_threshold:
@@ -148,10 +150,13 @@ class DetectionEventEngine:
         # Rule 3 — restricted zone intrusion (all classes)
         for zone in self.config.restricted_zones:
             for det in detections:
-                if zone.contains_bbox_centre(det["bbox"]):
+                bbox = det.get("bbox")
+                if bbox and zone.contains_bbox_centre(bbox):
+                    cls_name = det.get("class", "object")
+                    conf = det.get("confidence", 0.0)
                     events.append(
                         f"ZONE_INTRUSION:{zone.name} "
-                        f"({det['class']} @ conf={det['confidence']:.0%})"
+                        f"({cls_name} @ conf={conf:.0%})"
                     )
                     break   # one alert per zone per frame is enough
 

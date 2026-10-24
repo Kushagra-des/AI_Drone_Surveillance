@@ -243,7 +243,14 @@ def overlay_stats(
     proc_ms         : last frame processing time in ms
     detection_count : number of detections in this frame
     event_flags     : list of active event label strings (or None)
+
+    Notes
+    -----
+    bg_h and text Y-positions are clamped to frame dimensions so this
+    function never crashes on small frames or when many event flags are active.
     """
+    frame_h, frame_w = frame.shape[:2]
+
     lines = [
         f"FPS: {fps:5.1f}",
         f"Proc: {proc_ms:5.1f} ms",
@@ -254,21 +261,29 @@ def overlay_stats(
             lines.append(f"[EVENT] {flag}")
 
     x, y0, dy = 8, 24, 22
-    bg_h = dy * len(lines) + 8
-    bg_w = 220
 
-    # semi-transparent background rectangle
-    roi = frame[0: bg_h, 0: bg_w]
-    overlay = roi.copy()
-    cv2.rectangle(overlay, (0, 0), (bg_w, bg_h), (0, 0, 0), cv2.FILLED)
-    cv2.addWeighted(overlay, 0.55, roi, 0.45, 0, roi)
-    frame[0: bg_h, 0: bg_w] = roi
+    # FIX BUG 1: clamp bg dimensions to actual frame size
+    bg_h = min(dy * len(lines) + 8, frame_h)
+    bg_w = min(220, frame_w)
+
+    if bg_h > 0 and bg_w > 0:
+        # Semi-transparent background rectangle
+        roi = frame[0:bg_h, 0:bg_w]
+        overlay = roi.copy()
+        # Draw black fill only over the actual roi size (not bg_h×bg_w which may be clipped)
+        cv2.rectangle(overlay, (0, 0), (roi.shape[1], roi.shape[0]), (0, 0, 0), cv2.FILLED)
+        cv2.addWeighted(overlay, 0.55, roi, 0.45, 0, roi)
+        frame[0:bg_h, 0:bg_w] = roi
 
     for i, line in enumerate(lines):
+        text_y = y0 + i * dy
+        # FIX BUG 1: skip lines that would fall outside the frame
+        if text_y >= frame_h or x >= frame_w:
+            break
         colour = (0, 255, 200) if "[EVENT]" not in line else (0, 100, 255)
         cv2.putText(
             frame, line,
-            (x, y0 + i * dy),
+            (x, text_y),
             FONT, FONT_SCALE,
             colour,
             FONT_THICK,

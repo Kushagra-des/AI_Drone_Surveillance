@@ -36,7 +36,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Any
 
 import cv2
 import numpy as np
@@ -191,6 +191,8 @@ class DroneObjectDetector:
         frame: np.ndarray,
         *,
         draw: bool = True,
+        event_flags: list[str] | None = None,
+        event_engine: Any = None,
     ) -> Tuple[np.ndarray, List[dict]]:
         """
         Run detection on a single BGR frame.
@@ -203,13 +205,20 @@ class DroneObjectDetector:
         draw : bool
             When ``True`` (default), returns an annotated copy of *frame*
             with bounding boxes and labels drawn.  When ``False``, returns
-            the original frame unchanged (useful for headless / API mode).
+            a clean copy of *frame* (no annotations).
+        event_flags : list[str] | None
+            Optional event flag strings to show in the HUD overlay.
+        event_engine : Any | None
+            Optional event engine (e.g. ``DetectionEventEngine``). If provided
+            and ``event_flags`` is not set, evaluates the detections and renders
+            event alerts in a single combined pass.
 
         Returns
         -------
         annotated_frame : np.ndarray
-            A copy of *frame* with bounding boxes and stats overlay.
-            If *draw* is ``False``, this is the unmodified input frame.
+            A **copy** of *frame* — with bounding boxes and stats overlay
+            when *draw* is ``True``, otherwise a plain copy.
+            Always independent from the input; safe for callers to modify.
         detections : list[dict]
             List of detection dicts:
             ``{"class": str, "confidence": float, "bbox": [x1, y1, x2, y2]}``
@@ -217,7 +226,7 @@ class DroneObjectDetector:
 
         Notes
         -----
-        - Returns ``(frame, [])`` if frame validation fails — never raises
+        - Returns ``(frame_copy, [])`` if frame validation fails — never raises
           on bad frames, so the caller's video loop stays alive.
         - Processing time and FPS are tracked internally; call
           ``get_stats()`` to retrieve them.
@@ -226,7 +235,11 @@ class DroneObjectDetector:
         ok, reason = FrameValidator.validate(frame)
         if not ok:
             logger.warning("Skipping invalid frame: %s", reason)
-            _safe = frame if isinstance(frame, np.ndarray) else np.zeros((480, 640, 3), np.uint8)
+            _safe = (
+                frame.copy()
+                if isinstance(frame, np.ndarray)
+                else np.zeros((480, 640, 3), np.uint8)
+            )
             return _safe, []
 
         self._fps_counter.tick_start()
@@ -243,8 +256,8 @@ class DroneObjectDetector:
             )
         except Exception as exc:  # noqa: BLE001
             logger.error("Model inference failed: %s", exc)
-            proc_ms = self._fps_counter.tick_end()
-            return frame, []
+            self._fps_counter.tick_end()
+            return frame.copy(), []
 
         proc_ms = self._fps_counter.tick_end()
 
@@ -252,6 +265,14 @@ class DroneObjectDetector:
         detections = self._parse_results(results)
         self._total_dets  += len(detections)
         self._frames_run  += 1
+
+        # ── evaluate events if engine provided ────────────────────────────────
+        if event_flags is None and event_engine is not None and hasattr(event_engine, "evaluate"):
+            try:
+                event_flags = event_engine.evaluate(detections)
+            except Exception as e:
+                logger.warning("Event engine evaluation failed: %s", e)
+                event_flags = None
 
         # ── annotate ──────────────────────────────────────────────────────────
         if draw:
@@ -261,9 +282,10 @@ class DroneObjectDetector:
                 fps=self._fps_counter.fps,
                 proc_ms=proc_ms,
                 detection_count=len(detections),
+                event_flags=event_flags,
             )
         else:
-            annotated = frame
+            annotated = frame.copy()
 
         return annotated, detections
 
@@ -321,15 +343,13 @@ class DroneObjectDetector:
             "yolov8n.pt", "yolov8s.pt", "yolov8m.pt",
             "yolov8l.pt", "yolov8x.pt",
         }
-        name = model_path.name
-        if name in _known_shorthand:
+        if model_path.name in _known_shorthand:
             return   # Ultralytics will download this automatically
-        if model_path.is_absolute() or os.sep in str(model_path):
-            if not model_path.exists():
-                raise FileNotFoundError(
-                    f"Model weights not found: {model_path}\n"
-                    "Tip: use 'yolov8n.pt' to auto-download the pretrained model."
-                )
+        if not model_path.exists():
+            raise FileNotFoundError(
+                f"Model weights not found: {model_path}\n"
+                "Tip: use 'yolov8n.pt' to auto-download the pretrained model."
+            )
 
     @staticmethod
     def _validate_classes(classes: list[str]) -> list[str]:
@@ -370,11 +390,31 @@ class DroneObjectDetector:
                 continue
 
             boxes = result.boxes
+            orig_shape = getattr(result, "orig_shape", None)
+            fh, fw = orig_shape[:2] if orig_shape else (None, None)
 
             for i in range(len(boxes)):
-                # xyxy pixel coords
-                xyxy = boxes.xyxy[i].cpu().numpy().astype(float)
-                x1, y1, x2, y2 = (int(round(v)) for v in xyxy)
+                # FIX BUG 5: convert to list first so we can guard the length
+                # and get a clear error if Ultralytics ever returns a malformed box.
+                try:
+                    xyxy_raw = boxes.xyxy[i].cpu().numpy().astype(float)
+                    coords = [float(v) for v in xyxy_raw]
+                    if len(coords) != 4:
+                        logger.warning(
+                            "Unexpected bbox length %d at box index %d — skipping",
+                            len(coords), i,
+                        )
+                        continue
+                    x1, y1, x2, y2 = (int(round(v)) for v in coords)
+                    # Clamp coordinates within frame boundaries
+                    if fw is not None and fh is not None:
+                        x1 = max(0, min(x1, int(fw)))
+                        y1 = max(0, min(y1, int(fh)))
+                        x2 = max(0, min(x2, int(fw)))
+                        y2 = max(0, min(y2, int(fh)))
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Failed to parse box %d: %s — skipping", i, exc)
+                    continue
 
                 conf     = float(boxes.conf[i].cpu().numpy())
                 cls_id   = int(boxes.cls[i].cpu().numpy())
@@ -391,3 +431,33 @@ class DroneObjectDetector:
                 })
 
         return detections
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Compatibility Aliases & Module-Level Entry Points
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Alias for backwards compatibility with backend YOLOAdapter
+YOLOv8Detector = DroneObjectDetector
+
+# Global default instance for module-level process_frame
+_default_detector: DroneObjectDetector | None = None
+
+
+def process_frame(
+    frame: np.ndarray,
+    *,
+    draw: bool = True,
+    event_flags: list[str] | None = None,
+    event_engine: Any = None,
+) -> Tuple[np.ndarray, List[dict]]:
+    """
+    Module-level process_frame helper using a lazy singleton detector.
+    Provides direct compatibility with backend callers expecting module-level inference.
+    """
+    global _default_detector
+    if _default_detector is None:
+        _default_detector = DroneObjectDetector()
+    return _default_detector.process_frame(
+        frame, draw=draw, event_flags=event_flags, event_engine=event_engine
+    )
