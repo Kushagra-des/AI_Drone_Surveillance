@@ -1,0 +1,9 @@
+# Backend local ignore rules
+uploads/*
+!uploads/.gitkeep
+*.db
+*.db-wal
+*.db-shm
+.env
+__pycache__/
+*.pyc
