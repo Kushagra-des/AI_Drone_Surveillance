@@ -1,0 +1,32 @@
+# Combined Python dependencies for the AI Drone Surveillance project.
+# Install from the repository root with:
+#   python -m pip install -r requirements.txt
+#
+# The frontend has a separate npm manifest:
+#   frontend\package.json
+
+# Backend API and persistence
+fastapi>=0.110.0
+uvicorn[standard]>=0.28.0
+sqlalchemy>=2.0.0
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+python-multipart>=0.0.9
+websockets>=12.0
+httpx>=0.27.0
+
+# Computer vision
+opencv-python>=4.9.0,<5.0.0
+numpy>=2.1.0,<3.0.0
+
+# YOLO inference
+ultralytics>=8.2.0,<9.0.0
+torch>=2.1.0
+torchvision>=0.16.0
+Pillow>=10.0.0
+supervision>=0.27.0,<1.0.0
+PyYAML>=6.0.0
+requests>=2.31.0
+
+# Testing
+pytest>=8.0.0
