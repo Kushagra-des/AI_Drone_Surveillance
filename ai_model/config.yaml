@@ -1,0 +1,25 @@
+video_source: 0
+model_path: yolov8n.pt
+confidence_threshold: 0.45
+classes:
+  - person
+  - car
+  - truck
+  - motorcycle
+
+# Pixel coordinates for a 640x480 frame. Adjust these for your camera view.
+reference_frame_size: [640, 480]
+zone_points:
+  - [120, 80]
+  - [520, 80]
+  - [520, 479]
+  - [120, 479]
+line_points:
+  - [320, 0]
+  - [320, 479]
+loitering_seconds: 15
+alert_cooldown_seconds: 10
+clip_seconds: 5
+video_fps: 25
+alerts_dir: ../alerts
+events_db: ../events.db
