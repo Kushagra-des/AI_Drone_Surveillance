@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Drone Surveillance</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Drone Surveillance</h1>
+    <div class="connection" aria-live="polite">
+      <span class="status-dot" id="status-dot"></span>
+      <span id="connection-status">Offline</span>
+    </div>
+  </header>
+  <main class="workspace">
+    <section class="video-section" aria-label="Live video">
+      <div class="controls">
+        <label for="source-type">Source</label>
+        <select id="source-type">
+          <option value="webcam">Webcam</option>
+          <option value="video_file">Video file</option>
+        </select>
+        <input id="source" type="text" value="0" aria-label="Camera index or uploaded video filename">
+        <button id="start-button" type="button">Start</button>
+        <button id="stop-button" type="button" disabled>Stop</button>
+        <button id="snapshot-button" type="button" disabled>Save snapshot</button>
+        <span id="monitoring-state" aria-live="polite">Not monitoring</span>
+      </div>
+      <div class="video-frame" id="video-frame">
+        <img id="video-feed" src="/video_feed" alt="Live annotated video feed">
+        <p id="video-message">No connection</p>
+      </div>
+      <p class="counts" id="counts">Objects: 0 · Alerts: 0</p>
+    </section>
+    <section class="events-section" aria-label="Detection events">
+      <div class="events-controls">
+        <label for="object-filter">Object</label>
+        <select id="object-filter"><option value="all">All</option></select>
+        <label for="alert-filter">Events</label>
+        <select id="alert-filter">
+          <option value="all">All</option>
+          <option value="alerts">Alerts only</option>
+        </select>
+        <label for="alert-type-filter">Alert type</label>
+        <select id="alert-type-filter">
+          <option value="all">All types</option>
+          <option value="zone">Zone</option>
+          <option value="loitering">Loitering</option>
+        </select>
+        <button id="export-button" type="button">Export CSV</button>
+        <button id="zone-alert-button" type="button" aria-pressed="true">Zone alerts: On</button>
+        <button id="loiter-alert-button" type="button" aria-pressed="true">Loitering alerts: On</button>
+      </div>
+      <table>
+        <thead>
+          <tr><th>Time</th><th>Object</th><th>ID</th><th>Conf.</th><th></th></tr>
+        </thead>
+        <tbody id="events-body"></tbody>
+      </table>
+    </section>
+  </main>
+  <script src="/app.js" defer></script>
+</body>
+</html>
